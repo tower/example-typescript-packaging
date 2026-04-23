@@ -29,7 +29,24 @@ function apiError(label: string, res: { response: Response; error?: unknown }): 
   return new Error(`${label}: ${res.response.status} ${JSON.stringify(res.error)}`);
 }
 
-// 2. Read the sample app off disk.
+// 2. Make sure the app exists on the server. Describe it; create on 404.
+
+const describe = await client.GET("/apps/{name}", {
+  params: { path: { name }, query: { runs: 0, timezone: "UTC" } },
+});
+if (describe.response.ok) {
+  console.log(`App "${name}" already exists.`);
+} else if (describe.response.status === 404) {
+  const created = await client.POST("/apps", {
+    body: { name, is_externally_accessible: false },
+  });
+  if (!created.response.ok) throw apiError("Create app failed", created);
+  console.log(`Created app "${name}".`);
+} else {
+  throw apiError("Describe app failed", describe);
+}
+
+// 3. Read the sample app off disk.
 
 const appDir = join(fileURLToPath(new URL(".", import.meta.url)), "sample-app");
 const appFiles: PackageEntry[] = [];
@@ -54,7 +71,7 @@ for (const entry of await readdir(appDir, { recursive: true, withFileTypes: true
 }
 if (!towerfileBytes) throw new Error(`No Towerfile found in ${appDir}`);
 
-// 3. Build the deterministic tar.gz bundle.
+// 4. Build the deterministic tar.gz bundle.
 
 // === tower-package-wasm call site ===
 // Produces the tar.gz byte stream that gets POSTed to /apps/{name}/deploy.
@@ -62,23 +79,6 @@ if (!towerfileBytes) throw new Error(`No Towerfile found in ${appDir}`);
 // normalized tar headers, no gzip mtime) — matches the CLI's output.
 const pkg = buildPackage({ appFiles, moduleFiles: [], towerfileBytes });
 console.log(`Built package: ${pkg.byteLength} bytes, ${appFiles.length} app file(s).`);
-
-// 4. Make sure the app exists on the server. Describe it; create on 404.
-
-const describe = await client.GET("/apps/{name}", {
-  params: { path: { name }, query: { runs: 0, timezone: "UTC" } },
-});
-if (describe.response.ok) {
-  console.log(`App "${name}" already exists.`);
-} else if (describe.response.status === 404) {
-  const created = await client.POST("/apps", {
-    body: { name, is_externally_accessible: false },
-  });
-  if (!created.response.ok) throw apiError("Create app failed", created);
-  console.log(`Created app "${name}".`);
-} else {
-  throw apiError("Describe app failed", describe);
-}
 
 // 5. Upload the package.
 
