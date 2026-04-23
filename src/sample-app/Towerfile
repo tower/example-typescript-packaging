@@ -1,0 +1,4 @@
+[app]
+name = "test-typescript-deploys"
+script = "./main.py"
+source = ["./main.py"]
